@@ -29,8 +29,6 @@
 - [Azure Developer CLI (azd) 1.24.0+](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd) と AI Agents 拡張: `azd ext install azure.ai.agents` / `azd auth login`
 - ロール: Foundry プロジェクトに **Azure AI Project Manager**
 
-> **Docker Desktop は不要** です。`azd deploy` はコンテナイメージを **Azure Container Registry 上でリモートビルド** します。ローカルで `docker build` を走らせる必要はありません。
-
 ---
 
 ## Step 1. リポジトリをクローン
