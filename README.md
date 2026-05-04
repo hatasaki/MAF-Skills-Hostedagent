@@ -27,7 +27,52 @@
 - Python 3.10+
 - [Azure CLI 2.80+](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) と `az login` 済み
 - [Azure Developer CLI (azd) 1.24.0+](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd) と AI Agents 拡張: `azd ext install azure.ai.agents` / `azd auth login`
-- ロール: Foundry プロジェクトに **Azure AI Project Manager**
+- ロール: Foundry プロジェクトに **Azure AI Project Manager** ([Step 0](#step-0-ロール権限-の確認と付与) を参照)
+
+---
+
+## Step 0. ロール (権限) の確認と付与
+
+Hosted Agent を新規作成する `azd deploy` では、プラットフォームが内部で生成する Agent identity に `Azure AI User` ロールを割り当てる必要があります。この割り当てを実行できる最小権限ロールが **Azure AI Project Manager** (プロジェクトスコープ) です。  
+`Azure AI User` だけでは「ロール割り当て権限」が無いため新規 Hosted Agent 作成に失敗します。
+
+> 既に対象 Foundry プロジェクトで **Azure AI Project Manager / Azure AI Account Owner / Owner** のいずれかを保持している場合、本ステップはスキップしてください。
+
+### A. Azure ポータルで現在の割り当てを確認
+
+1. [Azure ポータル](https://portal.azure.com/) を開く
+2. 検索バーで **Foundry プロジェクト** リソースを検索 (例: 表示名やリソースグループから絞り込み)
+3. 左メニュー **「アクセス制御 (IAM)」 → 「ロール割り当て」 → 「マイ アクセスを表示」** を選択
+4. 一覧に以下のいずれかがあれば OK (本ステップ完了):
+   - `Azure AI Project Manager`
+   - `Azure AI Account Owner`
+   - `Owner`
+
+### B. 権限が無い場合 ─ Azure ポータルで付与
+
+サブスクリプションまたはプロジェクトの **Owner** / **User Access Administrator** に依頼するか、自身がそのロールを持つ場合に以下を実行します。
+
+1. Foundry プロジェクトリソースの **「アクセス制御 (IAM)」** を開く
+2. **「+ 追加」 → 「ロールの割り当ての追加」**
+3. **役割**: `Azure AI Project Manager` を選択 → **次へ**
+4. **メンバー**: 対象ユーザー (= ワークショップ受講者) を検索して追加 → **次へ**
+5. **レビューと割り当て** をクリック
+
+### C. (代替) Azure CLI で付与
+
+```powershell
+# プロジェクトの ARM ID をコピー (Foundry ポータル → プロジェクト → JSON ビュー)
+$PROJECT_ID = "<your-foundry-project-arm-id>"
+$USER_OBJECT_ID = (az ad signed-in-user show --query id -o tsv)
+
+az role assignment create `
+  --assignee-object-id $USER_OBJECT_ID `
+  --assignee-principal-type User `
+  --role "Azure AI Project Manager" `
+  --scope $PROJECT_ID
+```
+
+> 反映には数分かかる場合があります。`azd deploy` 実行時に `AuthorizationFailed` / `roleAssignments/write` 不足のエラーが出る場合は本ステップが未反映の可能性があります。
 
 ---
 
