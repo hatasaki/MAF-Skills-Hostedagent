@@ -25,10 +25,11 @@
 - [Microsoft Foundry プロジェクト](https://learn.microsoft.com/en-us/azure/foundry/how-to/create-projects) と LLM のモデルデプロイ (例: `gpt-5.2`、名前は任意)
 - Foundry に登録済みの 2 つの Prompt Agent (Microsoft 技術専門家 / Web 検索)
 - Python 3.10+
-- Docker Desktop (デプロイ時に内部で利用)
 - [Azure CLI 2.80+](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) と `az login` 済み
-- [Azure Developer CLI (azd)](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd) と AI Agents 拡張: `azd ext install azure.ai.agents` / `azd auth login`
+- [Azure Developer CLI (azd) 1.24.0+](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd) と AI Agents 拡張: `azd ext install azure.ai.agents` / `azd auth login`
 - ロール: Foundry プロジェクトに **Azure AI Project Manager**
+
+> **Docker Desktop は不要** です。`azd deploy` はコンテナイメージを **Azure Container Registry 上でリモートビルド** します。ローカルで `docker build` を走らせる必要はありません。
 
 ---
 
@@ -129,7 +130,7 @@ python local.py
 
 ## Step 5. Foundry Hosted Agent としてデプロイ
 
-最もシンプルな方法として **Azure Developer CLI (`azd`)** を使います。リポジトリには `Dockerfile` と `agent.manifest.yaml` が同梱済みなので、初期化とデプロイの 3 コマンドで完了します。
+最もシンプルな方法として **Azure Developer CLI (`azd`)** を使います。コンテナイメージは **ACR 上でリモートビルド** されるため、ローカルに Docker をインストールしておく必要はありません。リポジトリに同梱済みの `Dockerfile` と `agent.manifest.yaml` を `azd` がそのまま使用します。
 
 Step 2 で作成した `.env` の値を `azd env set` に流し込むスクリプトをリポジトリに同梱しているため、変数を再入力する必要はありません。
 
