@@ -281,22 +281,81 @@ azd env set WEB_SEARCH_AGENT_VERSION       "1"
 3. 右側の **Playground** で Step 4 と同じ質問を入力
 4. ルーティング動作と「概要 / 詳細 / 参考情報」フォーマットの応答を確認
 
+> **注意: Playground で `Network error` と表示される場合**  
+> サブエージェント (Microsoft Learn / Web 検索) の応答に時間がかかるとき、Foundry Playground のフロントエンドが先にタイムアウトして `Network error` と表示することがあります。Hosted Agent コンテナ自体は正常に処理を継続しているので、その場合は次の `azd` コマンドで CLI 経由の動作確認に切り替えてください。
+>
+> ```bash
+> azd ai agent invoke maf-skills-orchestrator "Microsoft Foundry の Hosted Agent とは何?"
+> ```
 ---
 
-## Step 6. トレースログを確認
+## Step 6. トレースログを確認 (Agent Framework の OTel 拡張を有効化)
 
-Hosted Agent は Application Insights に自動でトレースを送信します。Foundry ポータルから直接確認できます。
+Foundry の Hosted Agent は **コンテナホスト側で Application Insights への OpenTelemetry パイプラインを自動構成** していますが、**Agent Framework が出す GenAI スパン (`load_skill` / `ms_learn_agent` / `web_search_agent` などのツール呼び出し / プロンプト・応答本文)** は、フレームワーク側で **`enable_instrumentation()` を呼び出して有効化** しないと送出されません。これを行わないと、Foundry ポータルのトレース UI には「エージェントの呼び出し」と「最終応答」しか表示されず、サブエージェント呼び出しの内訳が見えません。
 
-1. Foundry ポータルで `maf-skills-orchestrator` を開く
-2. **「トレース (Tracing)」** タブを選択
-3. 任意の実行を選んでスパンを展開
-4. 以下が確認できれば、Skill 経由でマルチエージェントオーケストレーションが行われていることが分かります:
-   - `chat` スパン (オーケストレータの LLM 呼び出し)
-   - `tool: load_skill` (Agent Skills が `orchestrator-routing` を読み込み)
-   - `tool: ms_learn_agent` および/または `tool: web_search_agent` (サブエージェント呼び出し)
-   - 入出力のメッセージ詳細
+このステップでは、受講者自身が **エントリポイントとマニフェストに OTel 拡張を 1 行ずつ追加** して再デプロイし、トレースが詳細化されることを確認します。
 
-> Foundry プロジェクトに紐づく Application Insights を直接開いて、より詳細な分析 (実行時間 / 失敗率 / トークン数) も可能です。
+### 6-1. `agent-src/main.py` に `enable_instrumentation()` を追加
+
+[`agent-src/main.py`](agent-src/main.py) を開き、以下のように **2 箇所** を編集して保存します。
+
+1. インポート文を追加:
+
+   ```python
+   from agent_framework.observability import enable_instrumentation
+   ```
+
+2. `main()` 関数の中、`build_orchestrator()` を呼ぶ **前** に 1 行追加:
+
+   ```python
+   def main() -> None:
+       load_dotenv()
+       enable_instrumentation()        # ← この行を追加
+       agent = build_orchestrator()
+       server = ResponsesHostServer(agent)
+       server.run()
+   ```
+
+### 6-2. `agent-src/agent.manifest.yaml` に環境変数を追加
+
+[`agent-src/agent.manifest.yaml`](agent-src/agent.manifest.yaml) の `environment_variables:` ブロック末尾に、以下の 2 項目を追記して保存します。
+
+```yaml
+    # ====== Observability (OpenTelemetry / Foundry Tracing) ======
+    # Agent Framework の GenAI スパンを Application Insights に流す
+    - name: ENABLE_INSTRUMENTATION
+      value: "true"
+    # スパン属性にプロンプト / 応答本文を含めて Foundry トレース UI で内容を可視化する
+    # (本番運用では機密データが含まれる可能性があるため要慎重判断)
+    - name: ENABLE_SENSITIVE_DATA
+      value: "true"
+```
+
+> ⚠️ `ENABLE_SENSITIVE_DATA=true` はサブエージェントへの入力と戻り値をトレースに含める設定です。**本番環境では `false` にするか、この行を削除** してください。
+
+### 6-3. 再デプロイ
+
+```bash
+azd deploy
+```
+
+`agent.manifest.yaml` の変更を反映するため `azd ai agent init` を再実行する必要はありません。`azd deploy` だけで OK です。
+
+### 6-4. Foundry ポータルでトレースを確認
+
+1. Foundry ポータル ([https://ai.azure.com](https://ai.azure.com)) を開く
+2. プロジェクト → 左メニュー **「エージェント」 → `maf-skills-orchestrator`**
+3. **Playground** で質問を実行し、応答に表示される **トレース ID** をクリック (または **「トレース」 / 「監視」 タブ**)
+4. 展開したスパン階層で以下が見えれば成功:
+   - ルートの `invoke_agent ...` スパン (オーケストレータ全体)
+   - `chat <model>` スパン (Foundry LLM 呼び出し)
+   - `execute_tool load_skill` (Agent Skills の Skill 読み込み)
+   - `execute_tool ms_learn_agent` および / または `execute_tool web_search_agent` (サブエージェントの呼び出し)
+   - 各スパンの属性に **入出力メッセージ本文** (`gen_ai.input.messages` / `gen_ai.output.messages` 等)
+
+> **注意** ─ トレース UI の反映には **30〜60 秒の遅延** があります。再デプロイ直後はしばらく待ってから確認してください。
+
+> **より詳細な分析** ─ Foundry プロジェクトに紐づく Application Insights を Azure ポータルで直接開けば、実行時間 / 失敗率 / トークン使用量を Kusto クエリで自由に分析できます。
 
 ---
 
