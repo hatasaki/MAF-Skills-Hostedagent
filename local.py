@@ -16,6 +16,21 @@ from dotenv import load_dotenv
 
 from orchestrator import build_orchestrator
 
+# 標準出力に「呼び出されたサブエージェント」を表示するためのツール名集合
+SUB_AGENT_TOOL_NAMES = {"ms_learn_agent", "web_search_agent"}
+
+
+def _called_sub_agents(result) -> list[str]:
+    """応答メッセージから、呼び出されたサブエージェントのツール名を順序を保って抽出する。"""
+    seen: list[str] = []
+    for msg in getattr(result, "messages", []) or []:
+        for content in getattr(msg, "contents", []) or []:
+            if getattr(content, "type", None) == "function_call":
+                name = getattr(content, "name", None)
+                if name in SUB_AGENT_TOOL_NAMES and name not in seen:
+                    seen.append(name)
+    return seen
+
 
 async def main() -> None:
     load_dotenv()
@@ -35,6 +50,10 @@ async def main() -> None:
 
         result = await agent.run(user)
         print(f"\nAgent>\n{result.text}\n")
+
+        called = _called_sub_agents(result)
+        called_str = ", ".join(called) if called else "(none)"
+        print(f"[呼び出されたサブエージェント: {called_str}]\n")
 
 
 if __name__ == "__main__":

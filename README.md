@@ -161,13 +161,11 @@ python local.py
 
 | 入力例 | 期待動作 |
 | --- | --- |
-| `Microsoft Foundry の Hosted Agent とは何?` | `ms_learn_agent` のみ呼び出し |
+| `Microsoft FoundryのHosted Agentとは何?` | `ms_learn_agent` のみ呼び出し |
 | `今日の東京の天気を教えて` | `web_search_agent` のみ呼び出し |
-| `Microsoft Foundry の最新リリースニュースと、Hosted Agent の仕組みをまとめて` | 両方のエージェントを呼び出して統合 |
+| `Microsoft Agent Frameworkと他のフレームワークを比較して` | 両方のエージェントを呼び出して統合 |
 
 すべての回答が **「概要 / 詳細 / 参考情報」** のレポート形式で返ってくれば成功です。
-
-> 内部で `ms_learn_agent` / `web_search_agent` のどちらが呼び出されたかを把握したい場合は、Step 6 の Foundry トレース (デプロイ後) を確認するのが最も確実です。ローカルでも、応答末尾の `参考情報` セクションに記載される URL の傾向 (Microsoft Learn の URL か / 一般 Web の URL か) で大まかに判別できます。
 
 ---
 
