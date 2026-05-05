@@ -65,12 +65,14 @@ def build_orchestrator(credential=None) -> Agent:
         agent_name=os.environ["MS_LEARN_AGENT_NAME"],
         agent_version=os.getenv("MS_LEARN_AGENT_VERSION"),
         credential=credential,
+        allow_preview=True,
     )
     web_search_agent = FoundryAgent(
         project_endpoint=project_endpoint,
         agent_name=os.environ["WEB_SEARCH_AGENT_NAME"],
         agent_version=os.getenv("WEB_SEARCH_AGENT_VERSION"),
         credential=credential,
+        allow_preview=True,
     )
 
     # SKILL.md からツール名で参照されるので、name を固定する。
