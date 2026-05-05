@@ -295,9 +295,11 @@ Foundry の Hosted Agent は **コンテナホスト側で Application Insights 
 
 このステップでは、受講者自身が **エントリポイントとマニフェストに OTel 拡張を 1 行ずつ追加** して再デプロイし、トレースが詳細化されることを確認します。
 
-### 6-1. `agent-src/main.py` に `enable_instrumentation()` を追加
+> **編集対象** ─ Step 5 の `azd ai agent init` 実行時に `agent-src/` から **`src/maf-skills-orchestrator/`** にコピー展開されたファイルが、`azd deploy` で実際に使われるソースです。本ステップではこの **`src/maf-skills-orchestrator/`** 配下を直接編集します (`agent-src/` ではありません)。
 
-[`agent-src/main.py`](agent-src/main.py) を開き、以下のように **2 箇所** を編集して保存します。
+### 6-1. `src/maf-skills-orchestrator/main.py` に `enable_instrumentation()` を追加
+
+`src/maf-skills-orchestrator/main.py` を開き、以下のように **2 箇所** を編集して保存します。
 
 1. インポート文を追加:
 
@@ -316,12 +318,11 @@ Foundry の Hosted Agent は **コンテナホスト側で Application Insights 
        server.run()
    ```
 
-### 6-2. `agent-src/agent.manifest.yaml` に環境変数を追加
+### 6-2. `src/maf-skills-orchestrator/agent.yaml` に環境変数を追加
 
-[`agent-src/agent.manifest.yaml`](agent-src/agent.manifest.yaml) の `environment_variables:` ブロック末尾に、以下の 2 項目を追記して保存します。
+`src/maf-skills-orchestrator/agent.yaml` を開きます。 Step 5 の `azd ai agent init` 実行時に `agent.manifest.yaml` から展開されたファイルで、`AZURE_AI_MODEL_DEPLOYMENT_NAME` などの環境変数定義が既に入っています。同じ形式で **末尾に** 以下の 2 項目を追記して保存します (インデントとリスト記号 `-` を既存項目に合わせる)。
 
 ```yaml
-    # ====== Observability (OpenTelemetry / Foundry Tracing) ======
     # Agent Framework の GenAI スパンを Application Insights に流す
     - name: ENABLE_INSTRUMENTATION
       value: "true"
@@ -339,7 +340,7 @@ Foundry の Hosted Agent は **コンテナホスト側で Application Insights 
 azd deploy
 ```
 
-`agent.manifest.yaml` の変更を反映するため `azd ai agent init` を再実行する必要はありません。`azd deploy` だけで OK です。
+`agent-src/` 側を編集する必要はありません (azd は `src/maf-skills-orchestrator/` を直接ビルド対象とします)。
 
 ### 6-4. Foundry ポータルでトレースを確認
 
