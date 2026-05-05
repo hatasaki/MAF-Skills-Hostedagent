@@ -19,3 +19,6 @@ __pycache__/
 .ruff_cache/
 .DS_Store
 Thumbs.db
+
+# ローカル動作確認用 (Hosted Agent コンテナでは使わない)
+local.py

@@ -2,9 +2,9 @@
 
 使い方:
   az login                       # Azure CLI で先にログイン
+  cd agent-src
   python -m venv .venv && .\\.venv\\Scripts\\Activate.ps1  # Windows
   pip install -r requirements.txt
-  copy .env.example .env         # 値を編集
   python local.py
 """
 
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 from orchestrator import build_orchestrator
 
@@ -33,7 +33,8 @@ def _called_sub_agents(result) -> list[str]:
 
 
 async def main() -> None:
-    load_dotenv()
+    # find_dotenv() は呼び出し元から親ディレクトリへ探索する。
+    load_dotenv(find_dotenv(usecwd=True))
     agent = build_orchestrator()
 
     print("Orchestrator ready. 終了するには 'exit' / 'quit' / Ctrl+C。\n")

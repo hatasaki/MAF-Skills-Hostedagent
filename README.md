@@ -148,8 +148,8 @@ WEB_SEARCH_AGENT_VERSION=1
 
 ## Step 3. Agent Skills の中身を確認 → 出力フォーマットをカスタマイズ
 
-`skills/orchestrator-routing/SKILL.md` を開きます。  
-このファイルには **どのサブエージェントをいつ呼ぶかというマルチエージェント制御** が書かれています。オーケストレータ本体の `instructions` (`orchestrator.py` 内) には一切ルーティングロジックを書いていません — 制御はすべて Skill 経由です。
+`agent-src/skills/orchestrator-routing/SKILL.md` を開きます。  
+このファイルには **どのサブエージェントをいつ呼ぶかというマルチエージェント制御** が書かれています。オーケストレータ本体の `instructions` (`agent-src/orchestrator.py` 内) には一切ルーティングロジックを書いていません — 制御はすべて Skill 経由です。
 
 ここに **回答をレポート形式に統一する** 出力フォーマット節を追加して、エージェントの応答スタイルをカスタマイズします。`SKILL.md` の末尾に以下のセクションを追記して保存してください。
 
@@ -174,9 +174,12 @@ WEB_SEARCH_AGENT_VERSION=1
 
 ## Step 4. ローカル実行で動作確認
 
+ローカル実行は `agent-src/` ディレクトリで行います。`load_dotenv()` が親ディレクトリにさかのぼってルートの `.env` を見つけるため、`.env` はリポジトリルートに置いたままで OK です。
+
 #### Windows (PowerShell)
 
 ```powershell
+cd agent-src
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -187,6 +190,7 @@ python local.py
 #### Linux / macOS (bash)
 
 ```bash
+cd agent-src
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -208,34 +212,42 @@ python local.py
 
 ## Step 5. Foundry Hosted Agent としてデプロイ
 
-最もシンプルな方法として **Azure Developer CLI (`azd`)** を使います。コンテナイメージは **ACR 上でリモートビルド** されるため、ローカルに Docker をインストールしておく必要はありません。リポジトリに同梱済みの `Dockerfile` と `agent.manifest.yaml` を `azd` がそのまま使用します。
+最もシンプルな方法として **Azure Developer CLI (`azd`)** を使います。コンテナイメージは **ACR 上でリモートビルド** されるため、ローカルに Docker をインストールしておく必要はありません。`agent-src/` 同梱済みの `Dockerfile` と `agent.manifest.yaml` を `azd` がそのまま使用します。
 
 Step 2 で作成した `.env` の値を `azd env set` に流し込むスクリプトをリポジトリに同梱しているため、変数を再入力する必要はありません。
+
+> **ポイント** — 以下のコマンドは必ず **リポジトリルート** (= `agent-src/` の親ディレクトリ) から実行してください。Step 4 で `cd agent-src` したときは `cd ..` でルートに戻ります。`azd ai agent init` は manifest ディレクトリ (= `agent-src/`) を `./src/maf-skills-orchestrator/` にコピーしてデプロイソースとします。
 
 ### Windows (PowerShell)
 
 ```powershell
-# 1. azd プロジェクトを初期化 (Foundry プロジェクトと結びつけ)
-azd ai agent init -m .\agent.manifest.yaml
+# 1. azd にサインイン (初回のみ / セッションが切れたとき)
+azd auth login
 
-# 2. .env の値を azd 環境にコピー
+# 2. azd プロジェクトを初期化 (Foundry プロジェクトと結びつけ)
+azd ai agent init -m .\agent-src\agent.manifest.yaml
+
+# 3. .env の値を azd 環境にコピー
 .\scripts\Sync-AzdEnvFromDotenv.ps1
 
-# 3. ビルド → ACR プッシュ → Hosted Agent バージョン作成 を一括実行
+# 4. ビルド → ACR プッシュ → Hosted Agent バージョン作成 を一括実行
 azd deploy
 ```
 
 ### Linux / macOS (bash)
 
 ```bash
-# 1. azd プロジェクトを初期化
-azd ai agent init -m ./agent.manifest.yaml
+# 1. azd にサインイン (初回のみ / セッションが切れたとき)
+azd auth login
 
-# 2. .env の値を azd 環境にコピー
+# 2. azd プロジェクトを初期化
+azd ai agent init -m ./agent-src/agent.manifest.yaml
+
+# 3. .env の値を azd 環境にコピー
 chmod +x ./scripts/sync-azd-env-from-dotenv.sh
 ./scripts/sync-azd-env-from-dotenv.sh
 
-# 3. ビルド → ACR プッシュ → Hosted Agent バージョン作成 を一括実行
+# 4. ビルド → ACR プッシュ → Hosted Agent バージョン作成 を一括実行
 azd deploy
 ```
 
@@ -296,21 +308,23 @@ azd down
 
 ```
 .
-├── README.md                      # 本ファイル
-├── .env.example                   # 環境変数テンプレート
-├── requirements.txt               # Python 依存
-├── .dockerignore                  # .env など秘密情報をイメージに焼き込ませない
-├── Dockerfile                     # Hosted Agent 用 (linux/amd64, port 8088)
-├── agent.manifest.yaml            # azd デプロイ用マニフェスト
-├── orchestrator.py                # オーケストレータ構築 (Agent + Skills + as_tool)
-├── local.py                       # ローカル CLI エントリポイント
-├── main.py                        # Hosted エントリポイント (ResponsesHostServer)
-├── scripts/
-│   ├── Sync-AzdEnvFromDotenv.ps1  # .env → azd env set (Windows)
-│   └── sync-azd-env-from-dotenv.sh # .env → azd env set (Linux / macOS)
-└── skills/
-    └── orchestrator-routing/
-        └── SKILL.md               # マルチエージェント制御スキル (Agent Skills)
+├── README.md                         # 本ファイル
+├── .env.example                      # 環境変数テンプレート (リポジトリルートに `.env` を作成)
+├── .gitignore
+├── scripts/                          # デプロイ補助スクリプト (azd プロジェクトルートで実行)
+│   ├── Sync-AzdEnvFromDotenv.ps1     # .env → azd env set (Windows)
+│   └── sync-azd-env-from-dotenv.sh   # .env → azd env set (Linux / macOS)
+└── agent-src/                        # ここ以下が Hosted Agent コンテナにデプロイされる
+    ├── .dockerignore
+    ├── Dockerfile                    # Hosted Agent 用 (linux/amd64, port 8088)
+    ├── agent.manifest.yaml           # azd ai agent init 用マニフェスト
+    ├── requirements.txt              # Python 依存
+    ├── orchestrator.py               # オーケストレータ構築 (Agent + Skills + as_tool)
+    ├── main.py                       # Hosted エントリポイント (ResponsesHostServer)
+    ├── local.py                      # ローカル CLI エントリポイント (コンテナでは不使用)
+    └── skills/
+        └── orchestrator-routing/
+            └── SKILL.md              # マルチエージェント制御スキル (Agent Skills)
 ```
 
 ## 参考ドキュメント
