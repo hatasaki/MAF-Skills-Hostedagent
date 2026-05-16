@@ -248,65 +248,76 @@ python local.py
 
 最もシンプルな方法として **Azure Developer CLI (`azd`)** を使います。コンテナイメージは **ACR 上でリモートビルド** されるため、ローカルに Docker をインストールしておく必要はありません。`agent-src/` 同梱済みの `Dockerfile` と `agent.manifest.yaml` を `azd` がそのまま使用します。
 
-Step 2 で作成した `.env` の値を `azd env set` に流し込むスクリプトをリポジトリに同梱しているため、変数を再入力する必要はありません。
-
 > **ポイント** — 以下のコマンドは必ず **リポジトリルート** (= `agent-src/` の親ディレクトリ) から実行してください。Step 5 で `cd agent-src` したときは `cd ..` でルートに戻ります。`azd ai agent init` は manifest ディレクトリ (= `agent-src/`) を `./src/maf-skills-orchestrator/` にコピーしてデプロイソースとします。
 
 > **初回デプロイと 2 回目以降** — ACR などのインフラを新規作成する初回は **`azd up`** (provision + deploy を 1 コマンドで実行) を使います。コードのみ更新して再デプロイするときは **`azd deploy`** だけで OK です。
 
-### Windows (PowerShell)
+> **`azd ai agent init` がハングする場合 (`Manifest validated successfully` 後に応答が止まる)** — Step 3 / Step 5 で作った `.venv` ディレクトリ (`agent-src/.venv`, `scripts/provision_agents/.venv`) がリポジトリ配下に残っていると、`azd ai agent init` のファイルスキャンが完了せずハングすることがあります。その場合は一度コマンドを中止し、以下で `.venv` を削除してから再実行してください。
+>
+> #### Windows (PowerShell)
+>
+> ```powershell
+> Remove-Item -Recurse -Force .\agent-src\.venv -ErrorAction SilentlyContinue
+> Remove-Item -Recurse -Force .\scripts\provision_agents\.venv -ErrorAction SilentlyContinue
+> ```
+>
+> #### Linux / macOS (bash)
+>
+> ```bash
+> rm -rf ./agent-src/.venv ./scripts/provision_agents/.venv
+> ```
+
+### 実行コマンド
+
+#### Windows (PowerShell)
 
 ```powershell
 # 1. azd にサインイン (初回のみ / セッションが切れたとき)
 azd auth login
 
-# 2. azd プロジェクトを初期化 (Foundry プロジェクトと結びつけ)
-#    プロンプトで ACR ログインサーバーを聞かれたら、既存 ACR が無ければ空 Enter
-#    (`azd up` 時にテンプレートから新規作成される)
+# 2. azd プロジェクトを初期化 (Foundry プロジェクトと結びつけ。対話プロンプトは下表を参照)
 azd ai agent init -m .\agent-src\agent.manifest.yaml
 
-# 3. .env の値を azd 環境にコピー
-.\scripts\Sync-AzdEnvFromDotenv.ps1
-
-# 4. インフラ (ACR 等) の provision + ビルド + ACR プッシュ + Hosted Agent バージョン作成 を一括実行
+# 3. インフラ (ACR 等) の provision + ビルド + ACR プッシュ + Hosted Agent バージョン作成 を一括実行
 azd up
 ```
 
-### Linux / macOS (bash)
+#### Linux / macOS (bash)
 
 ```bash
 # 1. azd にサインイン (初回のみ / セッションが切れたとき)
 azd auth login
 
-# 2. azd プロジェクトを初期化
-#    プロンプトで ACR ログインサーバーを聞かれたら、既存 ACR が無ければ空 Enter
-#    (`azd up` 時にテンプレートから新規作成される)
+# 2. azd プロジェクトを初期化 (対話プロンプトは下表を参照)
 azd ai agent init -m ./agent-src/agent.manifest.yaml
 
-# 3. .env の値を azd 環境にコピー
-chmod +x ./scripts/sync-azd-env-from-dotenv.sh
-./scripts/sync-azd-env-from-dotenv.sh
-
-# 4. インフラ (ACR 等) の provision + ビルド + ACR プッシュ + Hosted Agent バージョン作成 を一括実行
+# 3. インフラ (ACR 等) の provision + ビルド + ACR プッシュ + Hosted Agent バージョン作成 を一括実行
 azd up
 ```
 
-> スクリプトは `.env` の各 `KEY=VALUE` 行を読み取り、`azd env set KEY VALUE` を順次実行します。コメント行 / 空行 / 値が空の行はスキップされます。値を変更したいときは `.env` を編集してから再実行するだけで OK です。
+### `azd ai agent init` の対話プロンプト一覧
 
-#### `.env` を作成していない場合 (手動で `azd env set`)
+実行すると以下が順に聞かれます。**「デフォルトでよい」項目は Enter キーで進める**だけで OK です。
 
-`.env` を用意していない場合や、デプロイ用に値を切り替えたい場合は、`azd env set` を直接実行して同等の登録ができます (上記スクリプトの代わりにこちらを実施)。
+| プロンプト (英語) | 入力ガイド |
+| --- | --- |
+| `Continue initializing an app in '...'?` | **y** (リポジトリのルートで初期化するため) |
+| `How would you like to configure model(s)?` | **Use existing model deployment(s) from a Foundry project** |
+| `Select a tenant` |  Azure の **テナント** を矢印キーで選択 |
+| `Select subscription` | Foundry プロジェクトのある **Azure サブスクリプション** を矢印キーで選択 |
+| `Select a Foundry project` | Step 2 でエンドポイントを確認したプロジェクト
+| `Select deployment` (gpt-5.2 用) | Step 2 で確認した既存モデルデプロイを選択 |
+| `Select container resource allocation` | **`0.25 cores, 0.5Gi memory`** (デフォルト) で十分 |
 
-```bash
-azd env set FOUNDRY_PROJECT_ENDPOINT       "<your-endpoint>"
-azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME "<your-model-deployment-name>"
-azd env set MS_LEARN_AGENT_NAME            "<ms-learn-agent-name>"
-azd env set MS_LEARN_AGENT_VERSION         "1"
-azd env set WEB_SEARCH_AGENT_NAME          "<web-search-agent-name>"
-azd env set WEB_SEARCH_AGENT_VERSION       "1"
-```
+> **メモ** — 全項目入力後、`azd ai agent init` は次の作業を行います:
+> - `agent-src/` の中身を `src/maf-skills-orchestrator/` にコピー
+> - `agent.manifest.yaml` のプレースホルダ `{{AZURE_AI_MODEL_DEPLOYMENT_NAME}}` を選択したモデル名で解決して `src/maf-skills-orchestrator/agent.yaml` を生成
+> - `azure.yaml` に `services: maf-skills-orchestrator` セクションを追加
+> - `infra/` Bicep テンプレートを配置 (ACR / Application Insights など)
 
-`azd up` 完了後、Foundry ポータルの **「エージェント」** 一覧に `maf-skills-orchestrator` が表示されます。
+### `azd up` 完了後の確認
+
+Foundry ポータルの **「エージェント」** 一覧に `maf-skills-orchestrator` が表示されます。
 
 ### Foundry ポータル上で応答を確認
 
@@ -411,9 +422,7 @@ azd down
 ├── README.md                         # 本ファイル
 ├── .env.example                      # 環境変数テンプレート (リポジトリルートに `.env` を作成)
 ├── .gitignore
-├── scripts/                          # デプロイ補助スクリプト (azd プロジェクトルートで実行)
-│   ├── Sync-AzdEnvFromDotenv.ps1     # .env → azd env set (Windows)
-│   ├── sync-azd-env-from-dotenv.sh   # .env → azd env set (Linux / macOS)
+├── scripts/                          # ワークショップ用スクリプト
 │   └── provision_agents/             # Step 3: サブエージェント (Microsoft Learn MCP / Web 検索) 作成
 │       ├── provision_agents.py
 │       └── requirements.txt
