@@ -23,12 +23,14 @@ from azure.identity import DefaultAzureCredential
 
 SKILLS_DIR = Path(__file__).parent / "skills"
 
+# サブエージェントの名前 (固定。変更する場合は provision_agents.py も合わせる)
+MS_LEARN_AGENT_NAME = "ms-learn"
+WEB_SEARCH_AGENT_NAME = "web-search"
+
 # 必須の環境変数 (未設定だとオーケストレータを構築できない)
 REQUIRED_ENV_VARS = (
     "FOUNDRY_PROJECT_ENDPOINT",
     "AZURE_AI_MODEL_DEPLOYMENT_NAME",
-    "MS_LEARN_AGENT_NAME",
-    "WEB_SEARCH_AGENT_NAME",
 )
 
 # 意図的に最小限。ルーティング/出力フォーマットは SKILL.md 側で定義する。
@@ -59,18 +61,19 @@ def build_orchestrator(credential=None) -> Agent:
 
     project_endpoint = os.environ["FOUNDRY_PROJECT_ENDPOINT"]
 
-    # --- 1) 既存 Foundry エージェント (Prompt Agent) をツール化 ---
+    # --- 1) サブエージェント (Prompt Agent) をツール化 ---
+    # エージェント名は固定 (`scripts/provision_agents/provision_agents.py` で同名に作成)。
+    # agent_version は指定しないと latest にバインドされる。
+    # `allow_preview=True` は Foundry のエージェント専用エンドポイントへルーティングするために必要。
     ms_learn_agent = FoundryAgent(
         project_endpoint=project_endpoint,
-        agent_name=os.environ["MS_LEARN_AGENT_NAME"],
-        agent_version=os.getenv("MS_LEARN_AGENT_VERSION"),
+        agent_name=MS_LEARN_AGENT_NAME,
         credential=credential,
         allow_preview=True,
     )
     web_search_agent = FoundryAgent(
         project_endpoint=project_endpoint,
-        agent_name=os.environ["WEB_SEARCH_AGENT_NAME"],
-        agent_version=os.getenv("WEB_SEARCH_AGENT_VERSION"),
+        agent_name=WEB_SEARCH_AGENT_NAME,
         credential=credential,
         allow_preview=True,
     )
@@ -103,7 +106,8 @@ def build_orchestrator(credential=None) -> Agent:
     )
 
     # --- 3) Agent Skills プロバイダー ---
-    skills_provider = SkillsProvider(skill_paths=SKILLS_DIR)
+    # 最新 SDK ではファイルベースの skill を `from_paths(...)` で読み込む。
+    skills_provider = SkillsProvider.from_paths(skill_paths=str(SKILLS_DIR))
 
     # --- 4) オーケストレーションエージェント ---
     return Agent(

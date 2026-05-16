@@ -23,7 +23,7 @@
 ## 前提
 
 - [Microsoft Foundry プロジェクト](https://learn.microsoft.com/en-us/azure/foundry/how-to/create-projects) と LLM のモデルデプロイ (例: `gpt-5.2`、名前は任意)
-- Foundry に登録済みの 2 つの Prompt Agent (Microsoft 技術専門家 / Web 検索)
+- Foundry プロジェクトに 2 つのサブエージェント (Microsoft 技術専門家 / Web 検索) を作成します — [Step 3](#step-3-サブエージェント-microsoft-技術専門家--web-検索-を作成) でスクリプトを実行
 - Python 3.10+
 - [Azure CLI 2.80+](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) と `az login` 済み
 - [Azure Developer CLI (azd) 1.24.0+](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd) と AI Agents 拡張: `azd ext install azure.ai.agents` / `azd auth login`
@@ -104,14 +104,13 @@ code .
 
 ---
 
-## Step 2. 既存エージェント ID と環境変数を設定
+## Step 2. 環境変数を設定
 
 Foundry ポータルで対象プロジェクトを開き、以下を控えます。
 
 1. **プロジェクトエンドポイント** ─ プロジェクトの「概要」ページの URL  
    形式: `https://<account>.services.ai.azure.com/api/projects/<project>`
 2. **モデルデプロイ名** ─ 「モデル + エンドポイント」で確認 (例: `gpt-5.2`。デプロイした際につけた名前をそのまま使用)
-3. **2 つの既存エージェントの名前 / バージョン** ─ 「エージェント」一覧から確認
 
 `.env.example` をコピーして `.env` を作成し、エディタで編集します。
 
@@ -129,24 +128,59 @@ cp .env.example .env
 ${EDITOR:-vi} .env
 ```
 
-`.env` 例 (全項目必須 — 1 つでも未設定だと起動時にエラーとなります):
+`.env` 例 (両項目必須):
 
 ```dotenv
 FOUNDRY_PROJECT_ENDPOINT=https://contoso.services.ai.azure.com/api/projects/contoso-proj
 AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-5.2
-
-MS_LEARN_AGENT_NAME=ms-learn-expert
-MS_LEARN_AGENT_VERSION=1
-
-WEB_SEARCH_AGENT_NAME=web-search
-WEB_SEARCH_AGENT_VERSION=1
 ```
-
-> **メモ** ─ 上記のうち `FOUNDRY_PROJECT_ENDPOINT` / `AZURE_AI_MODEL_DEPLOYMENT_NAME` / `MS_LEARN_AGENT_NAME` / `WEB_SEARCH_AGENT_NAME` は必須です。未設定のものがあるとオーケストレータ起動時に `次の必須環境変数が未設定です: ...` というエラーが表示されます。
 
 ---
 
-## Step 3. Agent Skills の中身を確認 → 出力フォーマットをカスタマイズ
+## Step 3. サブエージェント (Microsoft 技術専門家 / Web 検索) を作成
+
+オーケストレータが呼び出す 2 つのサブエージェントを Foundry プロジェクトに作成します。
+
+| エージェント名 (固定) | ツール | 用途 |
+| --- | --- | --- |
+| `ms-learn` | [Microsoft Learn MCP サーバー](https://learn.microsoft.com/api/mcp) (`MCPTool`) | Microsoft 技術の質問に Microsoft Learn ドキュメントを根拠に回答 |
+| `web-search` | Foundry `WebSearchTool` (Bing Search グラウンディング) | 一般的な質問に最新の Web 情報を根拠に回答 |
+
+[`scripts/provision_agents/provision_agents.py`](scripts/provision_agents/provision_agents.py) が Foundry SDK (`azure-ai-projects`) を使ってこれらを Prompt Agent として作成します。スクリプトは Step 2 で作成した `.env` (`FOUNDRY_PROJECT_ENDPOINT` / `AZURE_AI_MODEL_DEPLOYMENT_NAME`) をそのまま使います。
+
+> **メモ** ─ 同名エージェントが既にある場合は **新しいバージョンが追加** されるだけで、既存のデータは上書きされません。オーケストレータは常に最新バージョンを使う設定なので、複数回実行しても動作に影響はありません。
+
+スクリプト専用の仮想環境を作って実行します (オーケストレータ本体とは依存が異なるため分けています)。
+
+#### Windows (PowerShell)
+
+```powershell
+cd scripts\provision_agents
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+az login
+python provision_agents.py
+cd ..\..
+```
+
+#### Linux / macOS (bash)
+
+```bash
+cd scripts/provision_agents
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+az login
+python provision_agents.py
+cd ../..
+```
+
+実行後、Foundry ポータルの **「エージェント」** 一覧に `ms-learn` と `web-search` が表示されることを確認してください。Playground で個別に動作を試すこともできます (例: `ms-learn` に「Azure Foundry とは何?」 / `web-search` に「今日の東京の天気」)。
+
+---
+
+## Step 4. Agent Skills の中身を確認 → 出力フォーマットをカスタマイズ
 
 `agent-src/skills/orchestrator-routing/SKILL.md` を開きます。  
 このファイルには **どのサブエージェントをいつ呼ぶかというマルチエージェント制御** が書かれています。オーケストレータ本体の `instructions` (`agent-src/orchestrator.py` 内) には一切ルーティングロジックを書いていません — 制御はすべて Skill 経由です。
@@ -172,7 +206,7 @@ WEB_SEARCH_AGENT_VERSION=1
 
 ---
 
-## Step 4. ローカル実行で動作確認
+## Step 5. ローカル実行で動作確認
 
 ローカル実行は `agent-src/` ディレクトリで行います。`load_dotenv()` が親ディレクトリにさかのぼってルートの `.env` を見つけるため、`.env` はリポジトリルートに置いたままで OK です。
 
@@ -210,13 +244,13 @@ python local.py
 
 ---
 
-## Step 5. Foundry Hosted Agent としてデプロイ
+## Step 6. Foundry Hosted Agent としてデプロイ
 
 最もシンプルな方法として **Azure Developer CLI (`azd`)** を使います。コンテナイメージは **ACR 上でリモートビルド** されるため、ローカルに Docker をインストールしておく必要はありません。`agent-src/` 同梱済みの `Dockerfile` と `agent.manifest.yaml` を `azd` がそのまま使用します。
 
 Step 2 で作成した `.env` の値を `azd env set` に流し込むスクリプトをリポジトリに同梱しているため、変数を再入力する必要はありません。
 
-> **ポイント** — 以下のコマンドは必ず **リポジトリルート** (= `agent-src/` の親ディレクトリ) から実行してください。Step 4 で `cd agent-src` したときは `cd ..` でルートに戻ります。`azd ai agent init` は manifest ディレクトリ (= `agent-src/`) を `./src/maf-skills-orchestrator/` にコピーしてデプロイソースとします。
+> **ポイント** — 以下のコマンドは必ず **リポジトリルート** (= `agent-src/` の親ディレクトリ) から実行してください。Step 5 で `cd agent-src` したときは `cd ..` でルートに戻ります。`azd ai agent init` は manifest ディレクトリ (= `agent-src/`) を `./src/maf-skills-orchestrator/` にコピーしてデプロイソースとします。
 
 > **初回デプロイと 2 回目以降** — ACR などのインフラを新規作成する初回は **`azd up`** (provision + deploy を 1 コマンドで実行) を使います。コードのみ更新して再デプロイするときは **`azd deploy`** だけで OK です。
 
@@ -278,7 +312,7 @@ azd env set WEB_SEARCH_AGENT_VERSION       "1"
 
 1. Foundry ポータル ([https://ai.azure.com](https://ai.azure.com)) でプロジェクトを開く
 2. 左メニュー **「エージェント」 → `maf-skills-orchestrator`** を選択
-3. 右側の **Playground** で Step 4 と同じ質問を入力
+3. 右側の **Playground** で Step 5 と同じ質問を入力
 4. ルーティング動作と「概要 / 詳細 / 参考情報」フォーマットの応答を確認
 
 > **注意: Playground で `Network error` と表示される場合**  
@@ -289,15 +323,15 @@ azd env set WEB_SEARCH_AGENT_VERSION       "1"
 > ```
 ---
 
-## Step 6. トレースログを確認 (Agent Framework の OTel 拡張を有効化)
+## Step 7. トレースログを確認 (Agent Framework の OTel 拡張を有効化)
 
 Foundry の Hosted Agent は **コンテナホスト側で Application Insights への OpenTelemetry パイプラインを自動構成** していますが、**Agent Framework が出す GenAI スパン (`load_skill` / `ms_learn_agent` / `web_search_agent` などのツール呼び出し / プロンプト・応答本文)** は、フレームワーク側で **`enable_instrumentation()` を呼び出して有効化** しないと送出されません。これを行わないと、Foundry ポータルのトレース UI には「エージェントの呼び出し」と「最終応答」しか表示されず、サブエージェント呼び出しの内訳が見えません。
 
 このステップでは、受講者自身が **エントリポイントとマニフェストに OTel 拡張を 1 行ずつ追加** して再デプロイし、トレースが詳細化されることを確認します。
 
-> **編集対象** ─ Step 5 の `azd ai agent init` 実行時に `agent-src/` から **`src/maf-skills-orchestrator/`** にコピー展開されたファイルが、`azd deploy` で実際に使われるソースです。本ステップではこの **`src/maf-skills-orchestrator/`** 配下を直接編集します (`agent-src/` ではありません)。
+> **編集対象** ─ Step 6 の `azd ai agent init` 実行時に `agent-src/` から **`src/maf-skills-orchestrator/`** にコピー展開されたファイルが、`azd deploy` で実際に使われるソースです。本ステップではこの **`src/maf-skills-orchestrator/`** 配下を直接編集します (`agent-src/` ではありません)。
 
-### 6-1. `src/maf-skills-orchestrator/main.py` に `enable_instrumentation()` を追加
+### 7-1. `src/maf-skills-orchestrator/main.py` に `enable_instrumentation()` を追加
 
 `src/maf-skills-orchestrator/main.py` を開き、以下のように **2 箇所** を編集して保存します。
 
@@ -318,9 +352,9 @@ Foundry の Hosted Agent は **コンテナホスト側で Application Insights 
        server.run()
    ```
 
-### 6-2. `src/maf-skills-orchestrator/agent.yaml` に環境変数を追加
+### 7-2. `src/maf-skills-orchestrator/agent.yaml` に環境変数を追加
 
-`src/maf-skills-orchestrator/agent.yaml` を開きます。 Step 5 の `azd ai agent init` 実行時に `agent.manifest.yaml` から展開されたファイルで、`AZURE_AI_MODEL_DEPLOYMENT_NAME` などの環境変数定義が既に入っています。同じ形式で **末尾に** 以下の 2 項目を追記して保存します (インデントとリスト記号 `-` を既存項目に合わせる)。
+`src/maf-skills-orchestrator/agent.yaml` を開きます。 Step 6 の `azd ai agent init` 実行時に `agent.manifest.yaml` から展開されたファイルで、`AZURE_AI_MODEL_DEPLOYMENT_NAME` などの環境変数定義が既に入っています。同じ形式で **末尾に** 以下の 2 項目を追記して保存します (インデントとリスト記号 `-` を既存項目に合わせる)。
 
 ```yaml
     # Agent Framework の GenAI スパンを Application Insights に流す
@@ -334,7 +368,7 @@ Foundry の Hosted Agent は **コンテナホスト側で Application Insights 
 
 > ⚠️ `ENABLE_SENSITIVE_DATA=true` はサブエージェントへの入力と戻り値をトレースに含める設定です。**本番環境では `false` にするか、この行を削除** してください。
 
-### 6-3. 再デプロイ
+### 7-3. 再デプロイ
 
 ```bash
 azd deploy
@@ -342,7 +376,7 @@ azd deploy
 
 `agent-src/` 側を編集する必要はありません (azd は `src/maf-skills-orchestrator/` を直接ビルド対象とします)。
 
-### 6-4. Foundry ポータルでトレースを確認
+### 7-4. Foundry ポータルでトレースを確認
 
 1. Foundry ポータル ([https://ai.azure.com](https://ai.azure.com)) を開く
 2. プロジェクト → 左メニュー **「エージェント」 → `maf-skills-orchestrator`**
@@ -379,7 +413,10 @@ azd down
 ├── .gitignore
 ├── scripts/                          # デプロイ補助スクリプト (azd プロジェクトルートで実行)
 │   ├── Sync-AzdEnvFromDotenv.ps1     # .env → azd env set (Windows)
-│   └── sync-azd-env-from-dotenv.sh   # .env → azd env set (Linux / macOS)
+│   ├── sync-azd-env-from-dotenv.sh   # .env → azd env set (Linux / macOS)
+│   └── provision_agents/             # Step 3: サブエージェント (Microsoft Learn MCP / Web 検索) 作成
+│       ├── provision_agents.py
+│       └── requirements.txt
 └── agent-src/                        # ここ以下が Hosted Agent コンテナにデプロイされる
     ├── .dockerignore
     ├── Dockerfile                    # Hosted Agent 用 (linux/amd64, port 8088)
